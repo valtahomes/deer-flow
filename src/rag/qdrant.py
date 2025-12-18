@@ -7,9 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set
 
-from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
-from openai import OpenAI
 from qdrant_client import QdrantClient, grpc
 from qdrant_client.models import (
     Distance,
@@ -22,37 +20,11 @@ from qdrant_client.models import (
 
 from src.config.loader import get_bool_env, get_int_env, get_str_env
 from src.rag.retriever import Chunk, Document, Resource, Retriever
+from src.rag.embeddings import create_embedding_model, get_embedding_dimension
 
 logger = logging.getLogger(__name__)
 
 SCROLL_SIZE = 64
-
-
-class DashscopeEmbeddings:
-    def __init__(self, **kwargs: Any) -> None:
-        self._client: OpenAI = OpenAI(
-            api_key=kwargs.get("api_key", ""), base_url=kwargs.get("base_url", "")
-        )
-        self._model: str = kwargs.get("model", "")
-        self._encoding_format: str = kwargs.get("encoding_format", "float")
-
-    def _embed(self, texts: Sequence[str]) -> List[List[float]]:
-        clean_texts = [t if isinstance(t, str) else str(t) for t in texts]
-        if not clean_texts:
-            return []
-        resp = self._client.embeddings.create(
-            model=self._model,
-            input=clean_texts,
-            encoding_format=self._encoding_format,
-        )
-        return [d.embedding for d in resp.data]
-
-    def embed_query(self, text: str) -> List[float]:
-        embeddings = self._embed([text])
-        return embeddings[0] if embeddings else []
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return self._embed(texts)
 
 
 class QdrantProvider(Retriever):
@@ -82,33 +54,19 @@ class QdrantProvider(Retriever):
         self.vector_store: Any = None
 
     def _init_embedding_model(self) -> None:
-        kwargs = {
-            "api_key": self.embedding_api_key,
-            "model": self.embedding_model_name,
-            "base_url": self.embedding_base_url,
-            "encoding_format": "float",
-            "dimensions": self.embedding_dim,
-        }
-        if self.embedding_provider.lower() == "openai":
-            self.embedding_model = OpenAIEmbeddings(**kwargs)
-        elif self.embedding_provider.lower() == "dashscope":
-            self.embedding_model = DashscopeEmbeddings(**kwargs)
-        else:
-            raise ValueError(
-                f"Unsupported embedding provider: {self.embedding_provider}. "
-                "Supported providers: openai, dashscope"
-            )
+        """Initialize the embedding model based on configuration."""
+        self.embedding_model = create_embedding_model(
+            provider=self.embedding_provider,
+            model=self.embedding_model_name,
+            api_key=self.embedding_api_key,
+            base_url=self.embedding_base_url,
+            dimensions=self.embedding_dim,
+        )
 
     def _get_embedding_dimension(self, model_name: str) -> int:
-        embedding_dims = {
-            "text-embedding-ada-002": 1536,
-            "text-embedding-v4": 2048,
-        }
-
+        """Return embedding dimension for the supplied model name."""
         explicit_dim = get_int_env("QDRANT_EMBEDDING_DIM", 0)
-        if explicit_dim > 0:
-            return explicit_dim
-        return embedding_dims.get(model_name, 1536)
+        return get_embedding_dimension(model_name, explicit_dim)
 
     def _ensure_collection_exists(self) -> None:
         if not self.client.collection_exists(self.collection_name):

@@ -18,11 +18,13 @@ class SearchEngine(enum.Enum):
     SEARX = "searx"
     WIKIPEDIA = "wikipedia"
     SERPER = "serper"
+    SERPER_FIRECRAWL = "serper_firecrawl"  # Combined Serper search + Firecrawl scraping
 
 
 class CrawlerEngine(enum.Enum):
     JINA = "jina"
     INFOQUEST = "infoquest"
+    FIRECRAWL = "firecrawl"  # Firecrawl for web scraping
 
 
 # Tool configuration

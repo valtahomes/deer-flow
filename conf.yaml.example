@@ -6,15 +6,29 @@
 # - Set `verify_ssl` to `false` if your LLM server uses self-signed certificates
 # - A restart is required every time you change the `conf.yaml` file.
 
+# Default: Google Gemini models via Google AI Studio
+# Get your API key from https://aistudio.google.com/app/apikey
 BASIC_MODEL:
-  base_url: https://ark.cn-beijing.volces.com/api/v3
-  model: "doubao-1-5-pro-32k-250115"
-  api_key: xxxx
-  # max_retries: 3 # Maximum number of retries for LLM calls
-  # verify_ssl: false  # Uncomment this line to disable SSL certificate verification for self-signed certificates
-  # token_limit: 200000 # Maximum input tokens for context compression (prevents token overflow errors)
+  platform: "google_aistudio"
+  model: "gemini-2.0-flash-lite"  # Fast and cost-effective model for general tasks
+  api_key: your_gemini_api_key
+  max_retries: 3
+  # token_limit: 180000 # Maximum input tokens for context compression
 
-# Local model configuration example:
+REASONING_MODEL:
+  platform: "google_aistudio"
+  model: "gemini-2.0-flash"  # More capable model for planning and reasoning
+  api_key: your_gemini_api_key
+  max_retries: 3
+  # token_limit: 180000
+
+CODE_MODEL:
+  platform: "google_aistudio"
+  model: "gemini-2.0-flash"  # For code analysis and generation
+  api_key: your_gemini_api_key
+  max_retries: 3
+
+# Alternative model configurations:
 
 # Ollama (Tested and supported for local development)
 # BASIC_MODEL:
@@ -24,23 +38,26 @@ BASIC_MODEL:
 #   max_retries: 3
 #   verify_ssl: false  # Local deployment usually doesn't need SSL verification
 
-# To use Google Ai Studio as your basic platform:
+# Bytedance Doubao
 # BASIC_MODEL:
-#   platform: "google_aistudio"
-#   model: "gemini-2.5-flash"  # or "gemini-1.5-pro", "gemini-2.5-flash-exp", etc.
-#   api_key: your_gemini_api_key  # Get from https://aistudio.google.com/app/apikey
-#   max_retries: 3
- 
-# Reasoning model is optional.
-# Uncomment the following settings if you want to use reasoning model
-# for planning.
-
-# REASONING_MODEL:
 #   base_url: https://ark.cn-beijing.volces.com/api/v3
-#   model: "doubao-1-5-thinking-pro-m-250428"
+#   model: "doubao-1-5-pro-32k-250115"
 #   api_key: xxxx
-#   max_retries: 3 # Maximum number of retries for LLM calls
-#   token_limit: 150000 # Maximum input tokens for context compression
+#   max_retries: 3
+#   token_limit: 200000
+
+# OpenAI GPT-4o
+# BASIC_MODEL:
+#   base_url: https://api.openai.com/v1
+#   model: "gpt-4o"
+#   api_key: sk-xxx
+#   max_retries: 3
+
+# DeepSeek
+# BASIC_MODEL:
+#   base_url: https://api.deepseek.com
+#   model: "deepseek-chat"
+#   api_key: xxx
 
 
 # OTHER SETTINGS:
@@ -70,58 +87,71 @@ BASIC_MODEL:
 # ENABLE_WEB_SEARCH: true
 
 # Search engine configuration
-# Supported engines: tavily, infoquest
+# Default: Serper + Firecrawl combined search (recommended)
+# This uses Serper for Google search and Firecrawl for content scraping
+SEARCH_ENGINE:
+  engine: serper_firecrawl
+  # Number of top search results to scrape (1, 3, 5, or 10)
+  top_k: 3
+  # Include images in search results
+  include_images: true
+  # Country code for search (us, uk, cn, etc.)
+  gl: us
+  # Language code for search (en, zh, etc.)
+  hl: en
+  # Firecrawl settings
+  firecrawl_timeout: 30000  # Timeout in milliseconds
+  firecrawl_only_main_content: true  # Extract only main content
+  firecrawl_remove_base64_images: true  # Remove base64 images
+  firecrawl_block_ads: true  # Block ads
+  firecrawl_wait_for: 0  # Wait time before scraping (ms)
+  max_workers: 3  # Parallel scraping workers
+
+# Alternative search engines:
+
+# Tavily (AI-optimized search)
 # SEARCH_ENGINE:
-#   # Engine type to use: "tavily" or "infoquest"
-#   engine: tavily or infoquest
-#   
-#   # The following parameters are specific to Tavily
-#   # Only include results from these domains
-#   include_domains:
-#     - example.com
-#     - trusted-news.com
-#     - reliable-source.org
-#     - gov.cn
-#     - edu.cn
-#   # Exclude results from these domains
-#   exclude_domains:
-#     - example.com
-#   # Include an answer in the search results
+#   engine: tavily
+#   include_domains: []
+#   exclude_domains: []
 #   include_answer: false
-#   # Search depth: "basic" or "advanced"
 #   search_depth: "advanced"
-#   # Include raw content from pages
 #   include_raw_content: true
-#   # Include images in search results
 #   include_images: true
-#   # Include descriptions for images
 #   include_image_descriptions: true
-#   # Minimum score threshold for results (0-1)
-#   min_score_threshold: 0.0
-#   # Maximum content length per page
-#   max_content_length_per_page: 4000
-#   
-#   # The following parameters are specific to InfoQuest
-#   # Used to limit the scope of search results, only returns content within the specified time range. Set to -1 to disable time filtering
-#   time_range: 30
-#   # Used to limit the scope of search results, only returns content from specified whitelisted domains. Set to empty string to disable site filtering
-#   site: "example.com"
+
+# Serper only (without Firecrawl content scraping)
+# SEARCH_ENGINE:
+#   engine: serper
+
+# DuckDuckGo (no API key required)
+# SEARCH_ENGINE:
+#   engine: duckduckgo
+
+# Brave Search
+# SEARCH_ENGINE:
+#   engine: brave_search
 
 
 # Crawler engine configuration
-# Supported engines: jina (default), infoquest
-# Uncomment the following section to configure crawler engine
+# Default: Firecrawl (recommended for LLM-optimized content)
+CRAWLER_ENGINE:
+  engine: firecrawl
+  timeout: 30000  # Timeout in milliseconds
+  only_main_content: true  # Extract only main content
+  remove_base64_images: true  # Remove base64 images
+  block_ads: true  # Block ads
+  wait_for: 0  # Wait time before scraping (ms)
+
+# Alternative crawler engines:
+
+# Jina (simple, free tier available)
 # CRAWLER_ENGINE:
-#   # Engine type to use: "jina" (default) or "infoquest"
+#   engine: jina
+
+# InfoQuest (BytePlus product)
+# CRAWLER_ENGINE:
 #   engine: infoquest
-#
-#   # The following timeout parameters are only effective when engine is set to "infoquest"
-#   # Waiting time after page loading (in seconds)
-#   # Set to positive value to enable, -1 to disable
 #   fetch_time: 10
-#   # Overall timeout for the entire crawling process (in seconds)
-#   # Set to positive value to enable, -1 to disable
 #   timeout: 30
-#   # Timeout for navigating to the page (in seconds)
-#   # Set to positive value to enable, -1 to disable
 #   navi_timeout: 15

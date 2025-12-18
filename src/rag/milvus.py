@@ -8,45 +8,18 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from langchain_milvus.vectorstores import Milvus as LangchainMilvus
 from langchain_openai import OpenAIEmbeddings
-from openai import OpenAI
 from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
 
 from src.config.loader import get_bool_env, get_int_env, get_str_env
 from src.rag.retriever import Chunk, Document, Resource, Retriever
+from src.rag.embeddings import (
+    DashscopeEmbeddings,
+    GeminiEmbeddings,
+    create_embedding_model,
+    get_embedding_dimension,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class DashscopeEmbeddings:
-    """OpenAI-compatible embeddings wrapper."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        self._client: OpenAI = OpenAI(
-            api_key=kwargs.get("api_key", ""), base_url=kwargs.get("base_url", "")
-        )
-        self._model: str = kwargs.get("model", "")
-        self._encoding_format: str = kwargs.get("encoding_format", "float")
-
-    def _embed(self, texts: Sequence[str]) -> List[List[float]]:
-        """Internal helper performing the embedding API call."""
-        clean_texts = [t if isinstance(t, str) else str(t) for t in texts]
-        if not clean_texts:
-            return []
-        resp = self._client.embeddings.create(
-            model=self._model,
-            input=clean_texts,
-            encoding_format=self._encoding_format,
-        )
-        return [d.embedding for d in resp.data]
-
-    def embed_query(self, text: str) -> List[float]:
-        """Return embedding for a given text."""
-        embeddings = self._embed([text])
-        return embeddings[0] if embeddings else []
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Return embeddings for multiple documents (LangChain interface)."""
-        return self._embed(texts)
 
 
 class MilvusRetriever(Retriever):
@@ -106,37 +79,18 @@ class MilvusRetriever(Retriever):
 
     def _init_embedding_model(self) -> None:
         """Initialize the embedding model based on configuration."""
-        kwargs = {
-            "api_key": self.embedding_api_key,
-            "model": self.embedding_model,
-            "base_url": self.embedding_base_url,
-            "encoding_format": "float",
-            "dimensions": self.embedding_dim,
-        }
-        if self.embedding_provider.lower() == "openai":
-            self.embedding_model = OpenAIEmbeddings(**kwargs)
-        elif self.embedding_provider.lower() == "dashscope":
-            self.embedding_model = DashscopeEmbeddings(**kwargs)
-        else:
-            raise ValueError(
-                f"Unsupported embedding provider: {self.embedding_provider}. "
-                "Supported providers: openai, dashscope"
-            )
+        self.embedding_model_instance = create_embedding_model(
+            provider=self.embedding_provider,
+            model=self.embedding_model,
+            api_key=self.embedding_api_key,
+            base_url=self.embedding_base_url,
+            dimensions=self.embedding_dim,
+        )
 
     def _get_embedding_dimension(self, model_name: str) -> int:
         """Return embedding dimension for the supplied model name."""
-        # Common OpenAI embedding model dimensions
-        embedding_dims = {
-            "text-embedding-ada-002": 1536,
-            "text-embedding-v4": 2048,
-        }
-
-        # Check if user has explicitly set the dimension
         explicit_dim = get_int_env("MILVUS_EMBEDDING_DIM", 0)
-        if explicit_dim > 0:
-            return explicit_dim
-        # Return the dimension for the specified model
-        return embedding_dims.get(model_name, 1536)  # Default to 1536
+        return get_embedding_dimension(model_name, explicit_dim)
 
     def _create_collection_schema(self) -> CollectionSchema:
         """Build and return a Milvus ``CollectionSchema`` object with metadata field.
@@ -388,7 +342,7 @@ class MilvusRetriever(Retriever):
 
                 # Create LangChain client (it will handle collection creation automatically)
                 self.client = LangchainMilvus(
-                    embedding_function=self.embedding_model,
+                    embedding_function=self.embedding_model_instance,
                     collection_name=self.collection_name,
                     connection_args=connection_args,
                     # optional (if collection already exists with different schema, be careful)
@@ -416,8 +370,8 @@ class MilvusRetriever(Retriever):
 
             if not text.strip():
                 raise ValueError("Text cannot be empty or only whitespace")
-            # Unified embedding interface (OpenAIEmbeddings or DashscopeEmbeddings wrapper)
-            embeddings = self.embedding_model.embed_query(text=text.strip())
+            # Unified embedding interface (OpenAIEmbeddings, DashscopeEmbeddings, or GeminiEmbeddings)
+            embeddings = self.embedding_model_instance.embed_query(text=text.strip())
 
             # Validate output
             if not isinstance(embeddings, list) or not embeddings:

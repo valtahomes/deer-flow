@@ -9,6 +9,7 @@ from src.config import load_yaml_config
 from src.crawler.article import Article
 from src.crawler.infoquest_client import InfoQuestClient
 from src.crawler.jina_client import JinaClient
+from src.crawler.firecrawl_client import FirecrawlClient
 from src.crawler.readability_extractor import ReadabilityExtractor
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ class Crawler:
     def _select_crawler_tool(self, crawler_config: dict):
         # Only check engine from configuration file
         engine = crawler_config.get("engine", CrawlerEngine.JINA.value)
-        
+
         if engine == CrawlerEngine.JINA.value:
             logger.info(f"Selecting Jina crawler engine")
             return JinaClient()
@@ -208,7 +209,7 @@ class Crawler:
             fetch_time = crawler_config.get("fetch_time", -1)
             timeout = crawler_config.get("timeout", -1)
             navi_timeout = crawler_config.get("navi_timeout", -1)
-            
+
             # Log the configuration being used
             if fetch_time > 0 or timeout > 0 or navi_timeout > 0:
                 logger.debug(
@@ -217,12 +218,34 @@ class Crawler:
                     f"timeout={timeout}, "
                     f"navi_timeout={navi_timeout}"
                 )
-            
+
             # Initialize InfoQuestClient with the parameters from configuration
             return InfoQuestClient(
                 fetch_time=fetch_time,
                 timeout=timeout,
                 navi_timeout=navi_timeout
+            )
+        elif engine == CrawlerEngine.FIRECRAWL.value:
+            logger.info(f"Selecting Firecrawl crawler engine")
+            # Read Firecrawl parameters from crawler_config
+            timeout = crawler_config.get("timeout", 30000)
+            only_main_content = crawler_config.get("only_main_content", True)
+            remove_base64_images = crawler_config.get("remove_base64_images", True)
+            block_ads = crawler_config.get("block_ads", True)
+            wait_for = crawler_config.get("wait_for", 0)
+
+            logger.debug(
+                f"Initializing FirecrawlClient with parameters: "
+                f"timeout={timeout}, only_main_content={only_main_content}, "
+                f"block_ads={block_ads}, wait_for={wait_for}"
+            )
+
+            return FirecrawlClient(
+                timeout=timeout,
+                only_main_content=only_main_content,
+                remove_base64_images=remove_base64_images,
+                block_ads=block_ads,
+                wait_for=wait_for,
             )
         else:
             raise ValueError(f"Unsupported crawler engine: {engine}")

@@ -27,6 +27,7 @@ from src.tools.infoquest_search.infoquest_search_results import InfoQuestSearchR
 from src.tools.tavily_search.tavily_search_results_with_images import (
     TavilySearchWithImages,
 )
+from src.tools.serper_firecrawl.serper_firecrawl_search import SerperFirecrawlSearch
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ LoggedSerperSearch = create_logged_tool(GoogleSerperRun)
 LoggedArxivSearch = create_logged_tool(ArxivQueryRun)
 LoggedSearxSearch = create_logged_tool(SearxSearchRun)
 LoggedWikipediaSearch = create_logged_tool(WikipediaQueryRun)
+LoggedSerperFirecrawlSearch = create_logged_tool(SerperFirecrawlSearch)
 
 
 def get_search_config():
@@ -142,6 +144,40 @@ def get_web_search_tool(max_search_results: int):
                 load_all_available_meta=True,
                 doc_content_chars_max=wiki_doc_content_chars_max,
             ),
+        )
+    elif SELECTED_SEARCH_ENGINE == SearchEngine.SERPER_FIRECRAWL.value:
+        # Serper + Firecrawl combined search
+        # Gets search results from Serper, then scrapes each URL with Firecrawl
+        top_k = search_config.get("top_k", max_search_results)
+        include_images = search_config.get("include_images", True)
+        gl = search_config.get("gl", "us")
+        hl = search_config.get("hl", "en")
+        firecrawl_timeout = search_config.get("firecrawl_timeout", 30000)
+        firecrawl_only_main_content = search_config.get("firecrawl_only_main_content", True)
+        firecrawl_remove_base64_images = search_config.get("firecrawl_remove_base64_images", True)
+        firecrawl_block_ads = search_config.get("firecrawl_block_ads", True)
+        firecrawl_wait_for = search_config.get("firecrawl_wait_for", 0)
+        max_workers = search_config.get("max_workers", 3)
+
+        logger.info(
+            f"Serper+Firecrawl search configuration loaded: top_k={top_k}, "
+            f"include_images={include_images}, gl={gl}, hl={hl}, "
+            f"firecrawl_timeout={firecrawl_timeout}, firecrawl_only_main_content={firecrawl_only_main_content}"
+        )
+
+        return LoggedSerperFirecrawlSearch(
+            name="web_search",
+            serper_api_key=os.getenv("SERPER_API_KEY", ""),
+            top_k=top_k,
+            include_images=include_images,
+            gl=gl,
+            hl=hl,
+            firecrawl_timeout=firecrawl_timeout,
+            firecrawl_only_main_content=firecrawl_only_main_content,
+            firecrawl_remove_base64_images=firecrawl_remove_base64_images,
+            firecrawl_block_ads=firecrawl_block_ads,
+            firecrawl_wait_for=firecrawl_wait_for,
+            max_workers=max_workers,
         )
     else:
         raise ValueError(f"Unsupported search engine: {SELECTED_SEARCH_ENGINE}")
