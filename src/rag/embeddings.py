@@ -7,7 +7,7 @@ Embedding providers for RAG systems.
 Supports:
 - OpenAI embeddings (via langchain_openai)
 - Dashscope embeddings (Alibaba Cloud)
-- Google Gemini embeddings (gemini-embedding-001)
+- Google Gemini embeddings (gemini-embedding-001) via google-genai SDK
 """
 
 import logging
@@ -54,37 +54,38 @@ class DashscopeEmbeddings:
 
 class GeminiEmbeddings:
     """
-    Google Gemini embeddings using the Gemini API.
+    Google Gemini embeddings using the google-genai SDK.
 
     Model: gemini-embedding-001
-    Default dimensions: 3072 (can be truncated to 768, 1536, or 3072)
+    Default dimensions: 1536 (can be 768, 1536, or 3072)
 
     Environment variables:
-        GOOGLE_API_KEY or api_key parameter: Google AI API key
+        GEMINI_API_KEY or api_key parameter: Gemini API key
     """
 
     DEFAULT_MODEL = "gemini-embedding-001"
-    DEFAULT_DIMENSIONS = 768  # Recommended for most use cases, saves storage
+    DEFAULT_DIMENSIONS = 1536  # Balanced choice for quality and storage
 
     def __init__(self, **kwargs: Any) -> None:
-        self._api_key: str = kwargs.get("api_key", "") or os.getenv("GOOGLE_API_KEY", "")
+        self._api_key: str = kwargs.get("api_key", "") or os.getenv("GEMINI_API_KEY", "")
         self._model: str = kwargs.get("model", self.DEFAULT_MODEL)
         self._dimensions: int = kwargs.get("dimensions", self.DEFAULT_DIMENSIONS)
 
         if not self._api_key:
             logger.warning(
-                "Google API key is not set. Set GOOGLE_API_KEY environment variable."
+                "Gemini API key is not set. Set GEMINI_API_KEY environment variable."
             )
 
-        # Initialize Google Generative AI client
+        # Initialize Google GenAI client (new unified SDK)
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self._api_key)
-            self._client = genai
+            from google import genai
+            from google.genai import types
+            self._client = genai.Client(api_key=self._api_key)
+            self._types = types
         except ImportError:
             raise ImportError(
-                "google-generativeai package is required for Gemini embeddings. "
-                "Install with: pip install google-generativeai"
+                "google-genai package is required for Gemini embeddings. "
+                "Install with: pip install google-genai"
             )
 
     def _embed(self, texts: Sequence[str], task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
@@ -110,14 +111,21 @@ class GeminiEmbeddings:
         embeddings = []
         for text in clean_texts:
             try:
-                result = self._client.embed_content(
-                    model=f"models/{self._model}",
-                    content=text,
-                    task_type=task_type,
-                    output_dimensionality=self._dimensions,
+                # Use the new google-genai SDK API
+                result = self._client.models.embed_content(
+                    model=self._model,
+                    contents=text,
+                    config=self._types.EmbedContentConfig(
+                        task_type=task_type,
+                        output_dimensionality=self._dimensions,
+                    ),
                 )
-                embedding = result["embedding"]
-                embeddings.append(embedding)
+                # Extract embedding from result
+                if hasattr(result, 'embeddings') and result.embeddings:
+                    embedding = result.embeddings[0].values
+                else:
+                    embedding = result.embedding
+                embeddings.append(list(embedding))
             except Exception as e:
                 logger.error(f"Failed to generate Gemini embedding: {e}")
                 # Return zero vector on error
@@ -142,8 +150,8 @@ EMBEDDING_DIMENSIONS = {
     "text-embedding-3-small": 1536,
     "text-embedding-3-large": 3072,
     "text-embedding-v4": 2048,
-    # Google Gemini models
-    "gemini-embedding-001": 768,  # Default, can be 768, 1536, or 3072
+    # Google Gemini models (default to 1536 for balanced quality/storage)
+    "gemini-embedding-001": 1536,
     "embedding-001": 768,  # Legacy
     # Dashscope models
     "text-embedding-v1": 1536,
